@@ -13,6 +13,7 @@ export default function QuestRow({
 }) {
   const toggle = useXpStore((s) => s.toggleQuestComplete);
   const [pulse, setPulse] = useState(false);
+  const [justChecked, setJustChecked] = useState(false);
 
   const xpLabel = useMemo(() => {
     const xp = Number(quest.xp) || 0;
@@ -26,13 +27,18 @@ export default function QuestRow({
         toggle(quest.id);
         setPulse(true);
         window.setTimeout(() => setPulse(false), 380);
+        if (!checked) {
+          setJustChecked(true);
+          window.setTimeout(() => setJustChecked(false), 420);
+        }
       }}
       className={[
         "group flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition",
         checked
-          ? "border-emerald-400/20 bg-emerald-400/10"
+          ? "border-emerald-400/20 bg-emerald-400/8 opacity-70"
           : "border-white/10 bg-white/0 hover:bg-white/5",
         pulse ? "ring-2 ring-amber-300/35" : "",
+        justChecked ? "animate-[xp-pop_0.32s_ease-out_1]" : "",
       ].join(" ")}
     >
       <div className="min-w-0">
@@ -47,7 +53,12 @@ export default function QuestRow({
           >
             {checked ? "✓" : ""}
           </span>
-          <div className="min-w-0 truncate text-sm font-semibold text-zinc-100">
+          <div
+            className={[
+              "min-w-0 truncate text-sm font-semibold",
+              checked ? "text-zinc-300 line-through decoration-white/20" : "text-zinc-100",
+            ].join(" ")}
+          >
             {quest.title}
           </div>
         </div>

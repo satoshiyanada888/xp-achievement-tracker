@@ -146,10 +146,3 @@ export const useXpStore = create<XpStore>()(
   )
 );
 
-export function selectToday(store: XpStore) {
-  const ymd = getLocalYmd();
-  const log = store.logs[ymd]?.completed || [];
-  const todayXp = log.reduce((acc, x) => acc + (Number(x.xp) || 0), 0);
-  return { ymd, todayXp, completedIds: new Set(log.map((x) => x.questId)) };
-}
-

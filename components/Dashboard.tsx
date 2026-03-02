@@ -2,15 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { useXpStore, selectToday } from "../lib/store/useXpStore";
+import { useXpStore } from "../lib/store/useXpStore";
 import { getLevelInfo } from "../lib/domain/level";
-import { formatLocalDate } from "../lib/date";
+import { formatLocalDate, getLocalYmd } from "../lib/date";
 
 import Card from "./ui/Card";
 import ProgressBar from "./ui/ProgressBar";
 import QuestRow from "./QuestRow";
 import AddQuestModal from "./AddQuestModal";
 import TinyToast from "./TinyToast";
+import { computeStreak } from "../lib/domain/streak";
 
 const TEXT = {
   ja: {
@@ -18,26 +19,34 @@ const TEXT = {
     todayXp: "今日のXP",
     totalXp: "累計XP",
     level: "レベル",
-    addQuest: "クエスト追加",
+    addQuest: "前進を追加",
     todayQuests: "今日のクエスト",
     customQuests: "カスタム",
     dailyQuests: "デイリー",
     recentLog: "最近の達成ログ",
     emptyLog: "まだログがありません。小さくても一つ、進めてみよう。",
     reset: "全リセット",
+    completed: "完了",
+    nextLevelIn: "次のレベルまで",
+    streak: "日連続",
+    weekly: "週間",
   },
   en: {
     today: "Today",
     todayXp: "XP Today",
     totalXp: "Total XP",
     level: "Level",
-    addQuest: "Add quest",
+    addQuest: "Add progress",
     todayQuests: "Today's quests",
     customQuests: "Custom",
     dailyQuests: "Daily",
     recentLog: "Recent log",
     emptyLog: "No logs yet. Do one small thing—make progress visible.",
     reset: "Reset all",
+    completed: "completed",
+    nextLevelIn: "Next level in",
+    streak: "day streak",
+    weekly: "weekly",
   },
 } as const;
 
@@ -52,7 +61,16 @@ export default function Dashboard() {
   const totalXp = useXpStore((s) => s.totalXp);
   const lastEvent = useXpStore((s) => s.lastEvent);
 
-  const { ymd, todayXp, completedIds } = useXpStore(selectToday);
+  const ymd = getLocalYmd();
+  const todayCompleted = logs[ymd]?.completed || [];
+  const todayXp = useMemo(
+    () => todayCompleted.reduce((acc, x) => acc + (Number(x.xp) || 0), 0),
+    [todayCompleted]
+  );
+  const completedIds = useMemo(
+    () => new Set(todayCompleted.map((x) => x.questId)),
+    [todayCompleted]
+  );
   const levelInfo = useMemo(() => getLevelInfo(totalXp), [totalXp]);
 
   const t = TEXT[language];
@@ -63,6 +81,14 @@ export default function Dashboard() {
 
   const daily = quests.filter((q) => q.kind === "daily");
   const custom = quests.filter((q) => q.kind === "custom");
+  const todayQuestTotal = daily.length + custom.length;
+  const todayQuestDone = useMemo(() => {
+    const todayQuestIds = new Set(quests.map((q) => q.id));
+    return todayCompleted.filter((c) => todayQuestIds.has(c.questId)).length;
+  }, [quests, todayCompleted]);
+
+  const streak = useMemo(() => computeStreak(logs, ymd), [logs, ymd]);
+  const questProgress01 = todayQuestTotal > 0 ? todayQuestDone / todayQuestTotal : 0;
 
   const recentDays = useMemo(() => {
     const keys = Object.keys(logs || {}).sort((a, b) => (a > b ? -1 : 1));
@@ -119,11 +145,23 @@ export default function Dashboard() {
         <Card>
           <div className="text-xs font-semibold text-zinc-400">{t.todayXp}</div>
           <div
-            className="mt-1 text-2xl font-extrabold tracking-tight"
+            className={[
+              "mt-1 text-2xl font-extrabold tracking-tight",
+              todayXp > 0 ? "text-emerald-200" : "text-zinc-50",
+            ].join(" ")}
             style={xpPop ? { animation: "xp-pop 320ms ease-out 1" } : undefined}
           >
-            {todayXp}
+            {todayXp > 0 ? `+${todayXp}` : todayXp}
             <span className="ml-1 text-sm font-bold text-zinc-400">XP</span>
+          </div>
+          <div className="mt-1 text-xs font-semibold text-zinc-500">
+            {todayXp > 0
+              ? language === "en"
+                ? "Nice. Keep it small & real."
+                : "いい感じ。小さく、現実の前進を。"
+              : language === "en"
+                ? "Start with one small win."
+                : "まずは小さな達成をひとつ。"}
           </div>
         </Card>
         <Card>
@@ -131,6 +169,14 @@ export default function Dashboard() {
           <div className="mt-1 text-2xl font-extrabold tracking-tight">
             {totalXp}
             <span className="ml-1 text-sm font-bold text-zinc-400">XP</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-zinc-200">
+              {streak.streakDays} {t.streak}
+            </span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-zinc-200">
+              {t.weekly} {streak.weeklyCompletedDays}/7
+            </span>
           </div>
         </Card>
       </section>
@@ -151,17 +197,36 @@ export default function Dashboard() {
               ? language === "en"
                 ? "MAX"
                 : "MAX"
-              : `${totalXp - levelInfo.currentLevelMinXp}/${levelInfo.nextLevelXp - levelInfo.currentLevelMinXp} XP`}
+              : `${Math.round(levelInfo.progress01 * 100)}%`}
           </div>
         </div>
         <div className="mt-3">
           <ProgressBar value01={levelInfo.progress01} />
         </div>
+        <div className="mt-2 flex items-center justify-between gap-3 text-xs font-semibold text-zinc-400">
+          <div>
+            {levelInfo.nextLevelXp == null
+              ? language === "en"
+                ? "Max level reached."
+                : "最高レベルに到達。"
+              : `${t.nextLevelIn} ${Math.max(0, levelInfo.nextLevelXp - totalXp)} XP`}
+          </div>
+          <div className="font-mono text-zinc-500">
+            {levelInfo.nextLevelXp == null
+              ? ""
+              : `${totalXp - levelInfo.currentLevelMinXp}/${levelInfo.nextLevelXp - levelInfo.currentLevelMinXp}`}
+          </div>
+        </div>
       </Card>
 
       <Card>
         <div className="flex items-baseline justify-between">
-          <div className="text-sm font-bold text-zinc-50">{t.todayQuests}</div>
+          <div className="flex items-baseline gap-2">
+            <div className="text-sm font-bold text-zinc-50">{t.todayQuests}</div>
+            <div className="text-xs font-bold text-zinc-400">
+              {todayQuestDone} / {todayQuestTotal} {t.completed}
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -180,6 +245,10 @@ export default function Dashboard() {
           >
             {t.reset}
           </button>
+        </div>
+
+        <div className="mt-3">
+          <ProgressBar value01={questProgress01} />
         </div>
 
         <div className="mt-3">

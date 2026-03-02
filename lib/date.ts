@@ -16,3 +16,10 @@ export function formatLocalDate(ymd: string, lang: "ja" | "en") {
   }).format(dt);
 }
 
+export function addDaysLocalYmd(ymd: string, deltaDays: number) {
+  const [y, m, d] = ymd.split("-").map((x) => Number(x));
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() + (Number(deltaDays) || 0));
+  return getLocalYmd(dt);
+}
+

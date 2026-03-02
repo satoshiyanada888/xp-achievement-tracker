@@ -1,7 +1,7 @@
 export type StorageDriver = {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-  remove(key: string): Promise<void>;
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  remove(key: string): void;
 };
 
 export type StorageKeyspace = {
